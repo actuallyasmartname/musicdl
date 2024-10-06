@@ -81,7 +81,10 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
         ydl_opts = {'quiet': True}
         with yt_dlp.YoutubeDL(ydl_opts) as ytdl:
             sinfo = ytdl.extract_info(query, download=False)
-        songtitle = sinfo['title']
+        try:
+            songtitle = sinfo['title']
+        except:
+            raise Exception("Link passed was not a valid Soundcloud track! Make sure it's not a set/album and the track exists.")
         winSongTitle = songtitle.translate(str.maketrans('/\\<>:"|?*', '_________'))
         artist = sinfo['uploader']
         winArtistTitle = artist.translate(str.maketrans('/\\<>:"|?*', '_________'))
@@ -89,11 +92,7 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
             'format': 'bestaudio[ext=opus]/bestaudio[acodec=opus]', # force OPUS intially, if it doesn't work after 5 attempts switch to M4A
             'outtmpl': f'{location}{winSongTitle} - {winArtistTitle}',
             'overwrites': True,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': codec,
-                'preferredquality': bitrate,
-            }]
+            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': codec, 'preferredquality': bitrate,}]
         }
         while tries <= 10 and dlerrortries <= 5:
             try:
@@ -136,10 +135,7 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
             print(Fore.RED + f'[ERROR]: Could not fetch cover art for {songtitle}. Is Soundcloud working as intended?' + Style.RESET_ALL)
         if codec.lower() == 'opus':
             audio = OggOpus(f"{location}{winSongTitle} - {artist}.{codec}") 
-            pic = Picture()
-            pic.data = img
-            pic.type = 3
-            pic.mime = "image/jpeg"
+            pic = Picture(data=img, type=3, mime='image/jpeg')
             audio["metadata_block_picture"] = [base64.b64encode(pic.write()).decode('ascii')]
             audio.update({"title": songtitle, "artist": artist, "comment": query, 'year': rdate, 'genre': sinfo.get('genre', 'Unknown')})
             audio.save()
@@ -164,12 +160,12 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
         coverurl = sinfo['album']['images'][0]['url']
         winSongTitle = title.translate(str.maketrans('/\\<>:"|?*', '_________'))
         song = querySearch(title + ' ' + artist, explicit=sinfo['explicit'])
-        if song['videoId'] == None:
+        if not song['videoId']:
             print(Fore.RED + f'[ERROR]: Could not fetch track from query {query} because no primary or secondary downloads were found.' + Style.RESET_ALL)
             return False
     else:
         song = querySearch(query)
-        if song['videoId'] == None:
+        if not song['videoId']:
             print(Fore.RED + f'[ERROR]: Could not fetch track from query {query} because no primary or secondary downloads were found.' + Style.RESET_ALL)
             return False
         title = song['title']
@@ -249,10 +245,7 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
         audio.save()
     elif codec.lower() == 'opus':
         audio = OggOpus(f"{winSongTitle} - {artist}.{codec}") 
-        pic = Picture()
-        pic.data = img
-        pic.type = 3
-        pic.mime = "image/jpeg"
+        pic = Picture(data=img, type=3, mime='image/jpeg')
         audio["metadata_block_picture"] = [base64.b64encode(pic.write()).decode('ascii')]
         audio.update({"title": title, "artist": artist.replace("'", ""), "album": album})
         audio.save()
@@ -321,10 +314,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                             print(Fore.RED + f'[ERROR]: Could not fetch cover art for {i["title"]}. Is Soundcloud working as intended?' + Style.RESET_ALL)
                     if codec.lower() == 'opus':
                         audio = OggOpus(f"./{winArtistName}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.{codec}") 
-                        pic = Picture()
-                        pic.data = img
-                        pic.type = 3
-                        pic.mime = "image/jpeg"
+                        pic = Picture(data=img, type=3, mime='image/jpeg')
                         audio["metadata_block_picture"] = [base64.b64encode(pic.write()).decode('ascii')]
                         audio.update({"title": i['title'], "artist": i['uploader'], "comment": link, 'year': rdate, 'genre': i['genre'], 'album': albumtitle, 'tracknumber': str(realtracknum)})
                         audio.save()
@@ -368,7 +358,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         albuminfo = ytmusic.get_album(browse_id)
         ytmusictlist = []
         for i in albuminfo['tracks']:
-            if i['isExplicit'] == True:
+            if i['isExplicit']:
                 ytmusictlist.append(i['title'])
             else:
                 ytmusictlist.append(i['title'] + ' (clean)') # prevent overlap in certain releases
@@ -392,14 +382,14 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 for i in data['items']:
                     totaltracks += 1
                     tlist.append(i['name'])
-                    if i['explicit'] == True:
+                    if i['explicit']:
                         totaltracks = spalbuminfo['tracks']['total']+1
                         explicit = True
                 offset += 1
         else:
             for i in spalbuminfo['tracks']['items']:
                 tlist.append(i['name'])
-                if i['explicit'] == True:
+                if i['explicit']:
                     totaltracks = spalbuminfo['tracks']['total']+1
                     explicit = True
                     break
@@ -420,7 +410,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         albuminfo = ytmusic.get_album(album['browseId'])
         ytmusictlist = []
         for i in albuminfo['tracks']:
-            if i['isExplicit'] == True:
+            if i['isExplicit']:
                 ytmusictlist.append(i['title'])
             else:
                 ytmusictlist.append(i['title'] + ' (clean)')
@@ -432,7 +422,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                     albuminfo = ytmusic.get_album(i['browseId'])
                     ytmusictlist = []
                     for i in albuminfo['tracks']:
-                        if i['isExplicit'] == True:
+                        if i['isExplicit']:
                             ytmusictlist.append(i['title'])
                     else:
                         ytmusictlist.append(i['title'] + ' (clean)')
@@ -473,7 +463,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         albuminfo = ytmusic.get_album(album['browseId'])
         ytmusictlist = []
         for i in albuminfo['tracks']:
-            if i['isExplicit'] == True:
+            if i['isExplicit']:
                 ytmusictlist.append(i['title'])
             else:
                 ytmusictlist.append(i['title'] + ' (clean)')
@@ -483,23 +473,22 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 explicit = True
                 break
         if (albuminfo['title'].split('(feat.')[0].lower().rstrip(' ') != albumtitle.split('(feat.')[0].lower().rstrip(' ') or album['isExplicit'] != explicit) and albuminfo.get('other_versions'):
-            deezerfoundcopy = False
             found = False
             for i in albuminfo['other_versions']:
                 if i['title'].lower().rstrip() == albumtitle.lower().rstrip() and explicit == i['isExplicit']:
                     albuminfo = ytmusic.get_album(i['browseId'])
                     ytmusictlist = []
                     for i in albuminfo['tracks']:
-                        if i['isExplicit'] == True:
+                        if i['isExplicit']:
                             ytmusictlist.append(i['title'])
                         else:
                             ytmusictlist.append(i['title'] + ' (clean)')
                     playlist = Playlist('https://www.youtube.com/playlist?list='+albuminfo['audioPlaylistId'])
                     vids = playlist.video_urls
                     found = True
-                    deezerfoundcopy = True
                     break
             if not found:
+                deezerfoundcopy = False
                 print(Fore.YELLOW + '[WARN]: The specific edition of the album requested is not available in YouTube Music.' + Style.RESET_ALL)
                 playlist = Playlist('https://www.youtube.com/playlist?list='+album['playlistId'])
                 vids = playlist.video_urls
@@ -517,7 +506,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         albuminfo = ytmusic.get_album(album['browseId'])
         ytmusictlist = []
         for i in albuminfo['tracks']:
-            if i['isExplicit'] == True:
+            if i['isExplicit']:
                 ytmusictlist.append(i['title'])
             else:
                 ytmusictlist.append(i['title'] + ' (clean)')
@@ -527,7 +516,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         pass
     else:
         vids = {k: v for k, v in zip(ytmusictlist, vids)}
-    
+
     winArtistName = sanitize(albuminfo['artists'][0]['name'], isFolder=True)
     os.makedirs(f'./{winArtistName}', exist_ok=True)
     winAlbumTitle = sanitize(albumtitle, isFolder=True)
@@ -641,24 +630,13 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
             audio.save()
         if codec.lower() == 'm4a':
             audio = MP4(f"./{winArtistName}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.{codec}")
-            tags = {'covr': [MP4Cover(img, imageformat=MP4Cover.FORMAT_JPEG)],
-                '\xa9nam': stitle,
-                '\xa9ART': artistsfile,
-                '\xa9day': albumreleasedate if albumreleasedate is not None else albuminfo['year'],
-                'trkn': [(realtracknum, 0)],
-                '\xa9alb': albumtitle,
-                'aART': fileartistname,
-                'discnumber': [i['disc_number']]
-            }
+            tags = {'covr': [MP4Cover(img, imageformat=MP4Cover.FORMAT_JPEG)], '\xa9nam': stitle, '\xa9ART': artistsfile, '\xa9day': albumreleasedate if albumreleasedate is not None else albuminfo['year'], 'trkn': [(realtracknum, 0)], '\xa9alb': albumtitle, 'aART': fileartistname, 'discnumber': [i['disc_number']]}
             audio.update(tags)
             audio.save()
         elif codec.lower() == 'opus':
             audio = OggOpus(f"./{winArtistName}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.{codec}")
             audio.update({"date": albumreleasedate if albumreleasedate is not None else albuminfo['year'], "albumartist": fileartistname, "tracknumber": str(realtracknum)})
-            pic = Picture()
-            pic.data = img
-            pic.type = 3
-            pic.mime = "image/jpeg"
+            pic = Picture(data=img, type=3, mime='image/jpeg')
             audio["metadata_block_picture"] = [base64.b64encode(pic.write()).decode('ascii')]
             audio.update({"title": stitle, "artist": artistsfile, "album": albumtitle})
             if i.get('disc_number'):
