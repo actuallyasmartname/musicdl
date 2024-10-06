@@ -9,6 +9,9 @@ TODO:
 Add composer data and much more data from Deezer when link is passed
 Add feature info from Soundcloud (does NOT appear in ydl metadata)
 Soundcloud tag with playlist image (currently only tags with individual song images, does NOT appear in ydl metadata)
+Add tagging options for M4A and OPUS for the rest of the code
+Enum the available formats to download to/warn that other formats won't be tagged
+Do a general cleanup, this is very messy
 """
 
 import yt_dlp
@@ -81,10 +84,9 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
         winSongTitle = songtitle.translate(str.maketrans('/\\<>:"|?*', '_________'))
         artist = sinfo['uploader']
         winArtistTitle = artist.translate(str.maketrans('/\\<>:"|?*', '_________'))
-        outtmpl = f'{location}{winSongTitle} - {winArtistTitle}.{codec}'
         ydl_opts = {
             'format': 'bestaudio[ext=opus]/bestaudio[acodec=opus]', # force OPUS intially, if it doesn't work after 5 attempts switch to M4A
-            'outtmpl': outtmpl,
+            'outtmpl': f'{location}{winSongTitle} - {winArtistTitle}',
             'overwrites': True,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -92,46 +94,37 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
                 'preferredquality': bitrate,
             }]
         }
-        while tries < 11 and dlerrortries < 6:
+        while tries <= 10 and dlerrortries <= 5:
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([query])
                     break
-            except yt_dlp.utils.DownloadError as e:
-                print(e)
+            except yt_dlp.utils.DownloadError:
                 dlerrortries += 1
-            except Exception as e:
-                print(e)
+            except Exception:
                 time.sleep(1)
                 tries += 1
         if dlerrortries > 5:
-            dlerrortries = 0
-            tries = 0
+            dlerrortries = tries = 0
             ydl_opts['format'] = 'bestaudio/best'
-            while tries < 11 and dlerrortries < 6:
+            while tries <= 10 and dlerrortries <= 5:
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([query])
                         break
-                except yt_dlp.utils.DownloadError as e:
+                except yt_dlp.utils.DownloadError:
                     dlerrortries += 1
                 except Exception:
                     time.sleep(1)
                     tries += 1
         if tries >= 10:
             raise Exception(f"Couldn't download track {title}. YT-DLP error.")
-        rdate = sinfo.get('upload_date', 'Unknown')
-        metadata = {
-            'title': songtitle,
-            'artist': artist,
-            'genre': sinfo.get('genre', 'Unknown'),
-            'release_date': f"{rdate[:4]}-{rdate[4:6]}-{rdate[6:]}",
-            'thumbnail': sinfo.get('thumbnail', 'Unknown')                    
-        }
+        rdate = sinfo[rdate]
+        rdate = f"{rdate[:4]}-{rdate[4:6]}-{rdate[6:]}"
         img = b''
         tries = 0
         while tries < 6:
-            img = requests.get(metadata['thumbnail'])
+            img = requests.get(sinfo['thumbnail'])
             if img.ok:
                 img = img.content
                 break
@@ -139,7 +132,7 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
                 tries += 1
                 time.sleep(1)
         if tries > 5:
-            print(Fore.RED + f'[ERROR]: Could not fetch cover art for {metadata["title"]}. Is Soundcloud working as intended?' + Style.RESET_ALL)
+            print(Fore.RED + f'[ERROR]: Could not fetch cover art for {songtitle}. Is Soundcloud working as intended?' + Style.RESET_ALL)
         if codec.lower() == 'opus':
             audio = OggOpus(f"{location}{winSongTitle} - {artist}.{codec}") 
             pic = Picture()
@@ -147,7 +140,17 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
             pic.type = 3
             pic.mime = "image/jpeg"
             audio["metadata_block_picture"] = [base64.b64encode(pic.write()).decode('ascii')]
-            audio.update({"title": metadata['title'], "artist": metadata['artist'], "comment": query, 'year': metadata['release_date'], 'genre': metadata['genre']})
+            audio.update({"title": songtitle, "artist": artist, "comment": query, 'year': rdate, 'genre': sinfo.get('genre', 'Unknown')})
+            audio.save()
+        elif codec.lower() == 'm4a':
+            audio = MP4(f"{location}{winSongTitle} - {artist}.{codec}")
+            tags = {'covr': [MP4Cover(img, imageformat=MP4Cover.FORMAT_JPEG)],
+                '\xa9nam': songtitle,
+                '\xa9ART': artist,
+                '\xa9day': rdate,
+                '\xa9gen': sinfo.get('genre', 'Unknown')
+            }
+            audio.update(tags)
             audio.save()
         return True
     elif re.match(r"https?://open\.spotify\.com/track/[a-zA-Z0-9]{22}", query):
@@ -275,7 +278,6 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         with yt_dlp.YoutubeDL(ydl_opts) as ytdl:
             sinfo = ytdl.extract_info(query, download=False)
         artist = sinfo['entries'][0]['uploader']
-        print(sinfo)
         albumtitle = sinfo['title']
         winAlbumTitle = albumtitle.translate(str.maketrans('/\\<>:"|?*', '_________'))
         winArtistTitle = artist.translate(str.maketrans('/\\<>:"|?*', '_________'))
@@ -336,7 +338,6 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                         audio["metadata_block_picture"] = [base64.b64encode(pic.write()).decode('ascii')]
                         audio.update({"title": metadata['title'], "artist": metadata['artist'], "comment": link, 'year': metadata['release_date'], 'genre': metadata['genre'], 'album': metadata['album'], 'tracknumber': str(realtracknum)})
                         audio.save()
-                    print(metadata)
                     break
                 except yt_dlp.utils.DownloadError as e:
                     dlerrortries += 1
