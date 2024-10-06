@@ -1,6 +1,6 @@
 """
 Known bugs:
-Features are sometimes tagged multiple times
+Features are tagged multiple times
 Watch The Throne quality issues (should add a dictionary to query)
 """
 
@@ -9,9 +9,6 @@ TODO:
 Add composer data and much more data from Deezer when link is passed
 Add feature info from Soundcloud (does NOT appear in ydl metadata)
 Soundcloud tag with playlist image (currently only tags with individual song images, does NOT appear in ydl metadata)
-Add tagging options for M4A and OPUS for the rest of the code
-Enum the available formats to download to/warn that other formats won't be tagged
-Do a general cleanup, this is very messy
 """
 
 import yt_dlp
@@ -270,17 +267,25 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         return name[:-1] if name[-1] == '.' and isFolder else name
     ytmusic = YTMusic()
     if re.match(r'https:\/\/soundcloud\.com\/[^\/]+\/[^\/]+', query):
+        """
+        Soundcloud auth implementing soon. For now this only downloads 96KBPS OPUS.
+        """
         tries = dlerrortries = 0
         ydl_opts = {'quiet': True}
         with yt_dlp.YoutubeDL(ydl_opts) as ytdl:
             sinfo = ytdl.extract_info(query, download=False)
         artist = sinfo['entries'][0]['uploader']
+        print(sinfo)
         albumtitle = sinfo['title']
         winAlbumTitle = albumtitle.translate(str.maketrans('/\\<>:"|?*', '_________'))
         winArtistTitle = artist.translate(str.maketrans('/\\<>:"|?*', '_________'))
         os.makedirs(f'./{winArtistTitle}/{winAlbumTitle}', exist_ok=True)
         realtracknum = 1
         for i in sinfo['entries']:
+            if i['duration_string'] == '30': # previews for soundcloud go+
+                realtracknum += 1
+                print(Fore.YELLOW + f"[WARN]: Could not download track {i['title']} because it is only available for Soundcloud GO+ members." + Style.RESET_ALL)
+                continue
             link = i['webpage_url']
             winSongTitle = i['title'].translate(str.maketrans('/\\<>:"|?*', '_________'))
             outtmpl = f'./{winArtistTitle}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.%(ext)s'
