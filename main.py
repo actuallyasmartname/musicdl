@@ -11,7 +11,8 @@ Add feature info from Soundcloud (does NOT appear in ydl metadata)
 Soundcloud tag with playlist image (currently only tags with individual song images, does NOT appear in ydl metadata)
 Add tagging options for M4A and OPUS for the rest of the code
 Enum the available formats to download to/warn that other formats won't be tagged
-Do a general cleanup, this is very messy
+Do a general cleanup, this is very messy and has redundant code
+Don't use YT-DLP for Soundcloud API
 """
 
 import yt_dlp
@@ -280,8 +281,8 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         artist = sinfo['entries'][0]['uploader']
         albumtitle = sinfo['title']
         winAlbumTitle = albumtitle.translate(str.maketrans('/\\<>:"|?*', '_________'))
-        winArtistTitle = artist.translate(str.maketrans('/\\<>:"|?*', '_________'))
-        os.makedirs(f'./{winArtistTitle}/{winAlbumTitle}', exist_ok=True)
+        winArtistName = artist.translate(str.maketrans('/\\<>:"|?*', '_________'))
+        os.makedirs(f'./{winArtistName}/{winAlbumTitle}', exist_ok=True)
         realtracknum = 1
         for i in sinfo['entries']:
             if i['duration_string'] == '30': # previews for soundcloud go+
@@ -290,7 +291,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 continue
             link = i['webpage_url']
             winSongTitle = i['title'].translate(str.maketrans('/\\<>:"|?*', '_________'))
-            outtmpl = f'./{winArtistTitle}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.%(ext)s'
+            outtmpl = f'./{winArtistName}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.%(ext)s'
             ydl_opts = {
             'format': 'bestaudio[ext=opus]/bestaudio[acodec=opus]', # force OPUS intially, if it doesn't work after 5 attempts switch to M4A
             'outtmpl': outtmpl,
@@ -305,22 +306,15 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([link])
-                        rdate = i.get('upload_date', 'Unknown')
-
-                        metadata = {
-                            'title': i['title'],
-                            'album': sinfo['title'],
-                            'artist': i['uploader'],
-                            'genre': i['genre'],
-                            'release_date': f"{rdate[:4]}-{rdate[4:6]}-{rdate[6:]}",           
-                        }
+                        rdate = i['upload_date']
+                        rdate = f"{rdate[:4]}-{rdate[4:6]}-{rdate[6:]}"
                         for x in i['thumbnails']:
                             if x['id'] == 'original':
-                                metadata['thumbnail'] = x['url']
+                                thumb = x['url']
                         img = b''
                         tries = 0
                         while tries < 6:
-                            img = requests.get(metadata['thumbnail'])
+                            img = requests.get(thumb)
                             if img.ok:
                                 img = img.content
                                 break
@@ -328,15 +322,20 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                                 tries += 1
                                 time.sleep(1)
                         if tries > 5:
-                            print(Fore.RED + f'[ERROR]: Could not fetch cover art for {metadata["title"]}. Is Soundcloud working as intended?' + Style.RESET_ALL)
+                            print(Fore.RED + f'[ERROR]: Could not fetch cover art for {i["title"]}. Is Soundcloud working as intended?' + Style.RESET_ALL)
                     if codec.lower() == 'opus':
-                        audio = OggOpus(f"./{winArtistTitle}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.{codec}") 
+                        audio = OggOpus(f"./{winArtistName}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.{codec}") 
                         pic = Picture()
                         pic.data = img
                         pic.type = 3
                         pic.mime = "image/jpeg"
                         audio["metadata_block_picture"] = [base64.b64encode(pic.write()).decode('ascii')]
-                        audio.update({"title": metadata['title'], "artist": metadata['artist'], "comment": link, 'year': metadata['release_date'], 'genre': metadata['genre'], 'album': metadata['album'], 'tracknumber': str(realtracknum)})
+                        audio.update({"title": i['title'], "artist": i['uploader'], "comment": link, 'year': rdate, 'genre': i['genre'], 'album': albumtitle, 'tracknumber': str(realtracknum)})
+                        audio.save()
+                    elif codec.lower() == 'm4a':
+                        audio = MP4(f"./{winArtistName}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.{codec}")
+                        tags = {'covr': [MP4Cover(img, imageformat=MP4Cover.FORMAT_JPEG)], '\xa9nam': i['title'], '\xa9ART': i['uploader'], '\xa9day': rdate, 'trkn': [(realtracknum, 0)], '\xa9alb': albumtitle, 'aART': artist, '\xa9gen': i['genre']}
+                        audio.update(tags)
                         audio.save()
                     break
                 except yt_dlp.utils.DownloadError as e:
@@ -425,7 +424,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
             if i['isExplicit'] == True:
                 ytmusictlist.append(i['title'])
             else:
-                ytmusictlist.append(i['title'] + ' (clean)') # prevent overlap in certain releases
+                ytmusictlist.append(i['title'] + ' (clean)')
         spotfoundcopy = False
         if album['title'].lower().rstrip() != albumtitle.lower().rstrip() and albuminfo.get('other_versions'):
             found = False
@@ -437,7 +436,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                         if i['isExplicit'] == True:
                             ytmusictlist.append(i['title'])
                     else:
-                        ytmusictlist.append(i['title'] + ' (clean)') # prevent overlap in certain releases
+                        ytmusictlist.append(i['title'] + ' (clean)')
                     playlist = Playlist('https://www.youtube.com/playlist?list='+i['audioPlaylistId'])
                     vids = playlist.video_urls
                     found = True
@@ -478,7 +477,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
             if i['isExplicit'] == True:
                 ytmusictlist.append(i['title'])
             else:
-                ytmusictlist.append(i['title'] + ' (clean)') # prevent overlap in certain releases
+                ytmusictlist.append(i['title'] + ' (clean)')
         deezerfoundcopy = True
         for i in dalbuminfo['results']['SONGS']['data']:
             if i['EXPLICIT_TRACK_CONTENT']['EXPLICIT_LYRICS_STATUS'] == 1:
@@ -495,7 +494,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                         if i['isExplicit'] == True:
                             ytmusictlist.append(i['title'])
                         else:
-                            ytmusictlist.append(i['title'] + ' (clean)') # prevent overlap in certain releases
+                            ytmusictlist.append(i['title'] + ' (clean)')
                     playlist = Playlist('https://www.youtube.com/playlist?list='+i['audioPlaylistId'])
                     vids = playlist.video_urls
                     found = True
@@ -522,7 +521,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
             if i['isExplicit'] == True:
                 ytmusictlist.append(i['title'])
             else:
-                ytmusictlist.append(i['title'] + ' (clean)') # prevent overlap in certain releases
+                ytmusictlist.append(i['title'] + ' (clean)')
         folderartistname = ', '.join([artist['name'] for artist in albuminfo['artists']])
         fileartistname = '; '.join([artist['name'] for artist in albuminfo['artists']])
     vids = {k: v for k, v in zip(ytmusictlist, vids)}
