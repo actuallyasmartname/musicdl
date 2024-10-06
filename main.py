@@ -262,6 +262,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
     """Downloads an album based off of a search query (only for YT Music), YouTube Music link, Spotify link, Deezer link, or Soundcloud link (only do this if it's a Soundcloud exclusive, the quality sucks)"""
     isThirdParty = False
     isSpotify = False
+    albumreleasedate = ''
     isDeezer = False
     deezerfoundcopy = False
     spotfoundcopy = False
@@ -275,8 +276,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         Soundcloud auth implementing soon. For now this only downloads 96KBPS OPUS.
         """
         tries = dlerrortries = 0
-        ydl_opts = {'quiet': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ytdl:
+        with yt_dlp.YoutubeDL({'quiet': True}) as ytdl:
             sinfo = ytdl.extract_info(query, download=False)
         artist = sinfo['entries'][0]['uploader']
         albumtitle = sinfo['title']
@@ -293,14 +293,10 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
             winSongTitle = i['title'].translate(str.maketrans('/\\<>:"|?*', '_________'))
             outtmpl = f'./{winArtistName}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.%(ext)s'
             ydl_opts = {
-            'format': 'bestaudio[ext=opus]/bestaudio[acodec=opus]', # force OPUS intially, if it doesn't work after 5 attempts switch to M4A
-            'outtmpl': outtmpl,
-            'overwrites': True,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': codec,
-                'preferredquality': bitrate,
-            }]
+                'format': 'bestaudio[ext=opus]/bestaudio[acodec=opus]', # force OPUS intially, if it doesn't work after 5 attempts switch to M4A
+                'outtmpl': outtmpl,
+                'overwrites': True,
+                'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': codec, 'preferredquality': bitrate}]
             }
             while tries < 11 and dlerrortries < 6:
                 try:
@@ -414,10 +410,13 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         artistzero = spalbuminfo['artists'][0]['name']
         fileartistname = '; '.join([artist['name'] for artist in spalbuminfo['artists']])
         search_results = ytmusic.search(artistzero + ' ' + albumtitle.split('(feat.')[0].rstrip(' '), filter='albums')
+        album = None
         for i in search_results:
             if artistzero.lower().rstrip() == i['artists'][0]['name'].lower().rstrip() and (albumtitle.split('(feat.')[0].lower().rstrip(' ') in i['title'].split('(feat.')[0].lower().rstrip(' ')):
                 album = i
                 break
+        if not album:
+            raise Exception('Match of album was not found on YouTube Music!')
         albuminfo = ytmusic.get_album(album['browseId'])
         ytmusictlist = []
         for i in albuminfo['tracks']:
@@ -425,7 +424,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 ytmusictlist.append(i['title'])
             else:
                 ytmusictlist.append(i['title'] + ' (clean)')
-        spotfoundcopy = False
+        spotfoundcopy = True
         if album['title'].lower().rstrip() != albumtitle.lower().rstrip() and albuminfo.get('other_versions'):
             found = False
             for i in albuminfo['other_versions']:
@@ -437,12 +436,12 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                             ytmusictlist.append(i['title'])
                     else:
                         ytmusictlist.append(i['title'] + ' (clean)')
-                    playlist = Playlist('https://www.youtube.com/playlist?list='+i['audioPlaylistId'])
+                    playlist = Playlist('https://www.youtube.com/playlist?list='+albuminfo['audioPlaylistId'])
                     vids = playlist.video_urls
                     found = True
-                    spotfoundcopy = True
                     break
             if not found:
+                spotfoundcopy = False
                 print(Fore.YELLOW + '[WARN]: The specific edition of the album requested is not available in YouTube Music.' + Style.RESET_ALL)
                 playlist = Playlist('https://www.youtube.com/playlist?list='+album['playlistId'])
                 vids = playlist.video_urls
@@ -468,7 +467,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         fileartistname = '; '.join([artist['ART_NAME'] for artist in dalbuminfo['results']['DATA']['ARTISTS']])
         search_results = ytmusic.search(artistzero + ' ' + albumtitle.split('(feat.')[0].rstrip(' '), filter='albums')
         for i in search_results:
-            if artistzero.lower().rstrip() == i['artists'][0]['name'].lower().rstrip() and (albumtitle.split('(feat.')[0].lower().rstrip(' ') in i['title'].split('(feat.')[0].lower().rstrip(' ')):
+            if artistzero.lower().rstrip() == i['artists'][0]['name'].lower().rstrip() and (albumtitle.split('(feat.')[0].lower().rstrip(' ') in i['title'].split('(feat.')[0].lower().rstrip(' ') or i['title'].split('(feat.')[0].lower().rstrip(' ') in albumtitle.split('(feat.')[0].lower().rstrip(' ')):
                 album = i
                 break
         albuminfo = ytmusic.get_album(album['browseId'])
@@ -495,7 +494,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                             ytmusictlist.append(i['title'])
                         else:
                             ytmusictlist.append(i['title'] + ' (clean)')
-                    playlist = Playlist('https://www.youtube.com/playlist?list='+i['audioPlaylistId'])
+                    playlist = Playlist('https://www.youtube.com/playlist?list='+albuminfo['audioPlaylistId'])
                     vids = playlist.video_urls
                     found = True
                     deezerfoundcopy = True
@@ -524,7 +523,10 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 ytmusictlist.append(i['title'] + ' (clean)')
         folderartistname = ', '.join([artist['name'] for artist in albuminfo['artists']])
         fileartistname = '; '.join([artist['name'] for artist in albuminfo['artists']])
-    vids = {k: v for k, v in zip(ytmusictlist, vids)}
+    if spotfoundcopy or deezerfoundcopy:
+        pass
+    else:
+        vids = {k: v for k, v in zip(ytmusictlist, vids)}
     
     winArtistName = sanitize(albuminfo['artists'][0]['name'], isFolder=True)
     os.makedirs(f'./{winArtistName}', exist_ok=True)
@@ -569,11 +571,12 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
 
         winSongTitle = sanitize(stitle)
         os.makedirs(f'./{winArtistName}/{winAlbumTitle}', exist_ok=True)
-
         videoid = ''
-        if isSpotify:
+        if spotfoundcopy or deezerfoundcopy:
+            videoid = vids[realtracknum-1]
+        elif not deezerfoundcopy or not spotfoundcopy:
             for z in vids:
-                if z.lower().rstrip() in stitle.lower().rstrip():
+                if stitle.lower().rstrip().replace('(', '').replace(')', '') in z.lower().rstrip().replace('(', '').replace(')', ''):
                     videoid = vids[z]
                     break
         else:
@@ -591,11 +594,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 'format': 'bestaudio[ext=opus]/bestaudio[acodec=opus]', 
                 'outtmpl': f'./{winArtistName}/{winAlbumTitle}/{realtracknum}. {winSongTitle}.%(ext)s',
                 'overwrites': True,
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': codec,
-                    'preferredquality': bitrate,
-                }]
+                'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': codec, 'preferredquality': bitrate}]
             }
         tries = dlerrortries = 0
 
