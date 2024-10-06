@@ -11,7 +11,7 @@ class DeezerAPIAuthless:
         req = self.session.post(f'https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token=&cid={self.cid}').json()
         self.accessToken = req['results']['checkForm']
     def getAlbumInfo(self, album):
-        """Returns Spotify album info from album id."""
+        """Returns Deezer album info from album id."""
         tries = 0
         while tries <= 10:
             try:
@@ -29,6 +29,6 @@ class DeezerAPIAuthless:
                 time.sleep(1)
                 tries += 1
         if tries > 10:
-            raise Exception("Spotify's API failed to respond!")
+            raise Exception("Deezer's API failed to respond!")
     def __init__(self):
         self.getAccessToken()
