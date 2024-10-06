@@ -1,6 +1,6 @@
 """
 Known bugs:
-Features are tagged multiple times
+Features are sometimes tagged multiple times
 Watch The Throne quality issues (should add a dictionary to query)
 """
 
@@ -9,6 +9,9 @@ TODO:
 Add composer data and much more data from Deezer when link is passed
 Add feature info from Soundcloud (does NOT appear in ydl metadata)
 Soundcloud tag with playlist image (currently only tags with individual song images, does NOT appear in ydl metadata)
+Add tagging options for M4A and OPUS for the rest of the code
+Enum the available formats to download to/warn that other formats won't be tagged
+Do a general cleanup, this is very messy
 """
 
 import yt_dlp
