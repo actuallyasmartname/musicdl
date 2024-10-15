@@ -2,6 +2,7 @@
 Known bugs:
 Features are tagged multiple times
 Watch The Throne quality issues (should add a dictionary to query)
+Some tracks download twice for some reason
 """
 
 """
@@ -15,6 +16,7 @@ Do a general cleanup, this is very messy and has redundant code
 Don't use YT-DLP for Soundcloud API
 Soundcloud GO+ authentication options
 Apple Music API support
+Album downloads to specified location
 """
 
 import yt_dlp
@@ -108,8 +110,7 @@ def querySearch(query, artistname='', albumname='', songname='', lengthseconds='
 def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
     if re.match(r'https:\/\/soundcloud\.com\/[^\/]+\/[^\/]+', query):
         tries = dlerrortries = 0
-        ydl_opts = {'quiet': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ytdl:
+        with yt_dlp.YoutubeDL({'quiet': True}) as ytdl:
             sinfo = ytdl.extract_info(query, download=False)
         try:
             songtitle = sinfo['title']
@@ -171,6 +172,8 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
             tagAudio(audio=audio, tags={'covr': [MP4Cover(img, imageformat=MP4Cover.FORMAT_JPEG)], '\xa9nam': songtitle, '\xa9ART': artist, '\xa9day': rdate, '\xa9gen': sinfo.get('genre', 'Unknown')}, codec='m4a')
         return True
     elif re.match(r"https?://open\.spotify\.com/track/[a-zA-Z0-9]{22}", query):
+        raise Exception('spotify implementation in progress')
+        """
         spotify = SpotifyAPIAuthless()
         trackid = urlparse(query).path.split('/')[2]
         sinfo = spotify.getTrack(trackid)
@@ -183,6 +186,7 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
         if not song['videoId']:
             print(Fore.RED + f'[ERROR]: Could not fetch track from query {query} because no primary or secondary downloads were found.' + Style.RESET_ALL)
             return False
+        """
     else:
         song = querySearch(query)
         if not song['videoId']:
@@ -244,13 +248,13 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
         raise Exception(f"Couldn't download track {title}. YT-DLP error.")
     
     if codec.lower() == 'mp3':
-        audio = f"{winSongTitle} - {artist}.{codec}"
+        audio = f"{location}{winSongTitle} - {artist}.{codec}"
         tagAudio(audio=audio, tags={'title': title, 'artist': artist, 'album': album}, picture=img, codec='mp3')
     elif codec.lower() == 'm4a':
-        audio = MP4(f"{winSongTitle} - {artist}.{codec}")
+        audio = MP4(f"{location}{winSongTitle} - {artist}.{codec}")
         tagAudio(audio=audio, tags={'covr': [MP4Cover(img, imageformat=MP4Cover.FORMAT_JPEG)], '\xa9nam': title, '\xa9ART': artist, '\xa9alb': album}, codec='m4a')
     elif codec.lower() == 'opus':
-        audio = OggOpus(f"{winSongTitle} - {artist}.{codec}") 
+        audio = OggOpus(f"{location}{winSongTitle} - {artist}.{codec}") 
         tagAudio(audio=audio, tags={'title': title, 'artist': artist.replace("'", ""), 'album': album}, picture=img)
 
 
@@ -357,10 +361,8 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         if forceytcoverart:
             print(Fore.YELLOW + '[WARN]: forceytcoverart was passed but no Spotify link was added. This will do absolutely nothing.' + Style.RESET_ALL)
         playlist = Playlist(query)
-        playlist_id = playlist.playlist_id
         vids = playlist.video_urls
-        browse_id = ytmusic.get_album_browse_id(playlist_id)
-        albuminfo = ytmusic.get_album(browse_id)
+        albuminfo = ytmusic.get_album(ytmusic.get_album_browse_id(playlist.playlist_id))
         ytmusictlist = []
         for i in albuminfo['tracks']:
             if i['isExplicit']:
@@ -415,20 +417,10 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 break
         vids = {}
         if not album:
+            ytmusictlist = []
             for i in othertlist:
-                search = ytmusic.search(artistzero + ' ' + i['name'], filter='songs')
-                found = False
-                for x in search:
-                    try:
-                        if x['artists'][0]['name'] == artistzero:
-                            vids[i['name']] = x['videoId']
-                            found = True
-                            break
-                    except:
-                        continue
-                if not found:
-                    search = ytmusic.search(artistzero + ' ' + i['name'], filter='videos')
-            raise Exception('Match of album was not found on YouTube Music!') # turn into WARN instead of exception later
+                song = querySearch(i['name'] + ' ' + artistzero, artistzero, albumtitle, i['name'], round(i['duration_ms']/1000))
+            print(Fore.YELLOW + '[WARN]: The specific edition of the album requested is not available in YouTube Music.' + Style.RESET_ALL)
         else:
             albuminfo = ytmusic.get_album(album['browseId'])
             ytmusictlist = []
@@ -539,8 +531,10 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         pass
     else:
         vids = {k: v for k, v in zip(ytmusictlist, vids)}
-
-    winArtistName = sanitize(albuminfo['artists'][0]['name'], isFolder=True)
+    if isSpotify:
+        winArtistName = sanitize(artistzero, isFolder=True)
+    else:
+        winArtistName = sanitize(albuminfo['artists'][0]['name'], isFolder=True)
     os.makedirs(f'./{winArtistName}', exist_ok=True)
     winAlbumTitle = sanitize(albumtitle, isFolder=True)
     if (forceytcoverart and isThirdParty) or not isThirdParty:
@@ -596,7 +590,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                 videoid = vids.get(ogstitle, '')
             else:
                 videoid = vids.get(ogstitle+' (clean)', '')
-        if videoid == '' and not spotfoundcopy and isSpotify:
+        if videoid == '' and isSpotify:
             song = querySearch(i['name'] + ' ' + i['artists'][0]['name'], folderartistname, albumtitle, stitle, round(i['duration_ms']/1000))
             videoid = song['videoId']
         elif videoid == '':
@@ -617,7 +611,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
                     break
             except yt_dlp.utils.DownloadError:
                 dlerrortries += 1
-            except Exception:
+            except Exception as e:
                 time.sleep(1)
                 tries += 1
 
