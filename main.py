@@ -78,7 +78,6 @@ def querySearch(query, artistname='', albumname='', songname='', lengthseconds='
             for i in search_results:
                 for x in i['artists']:
                     if x['name'].lower() == artistname.lower():
-                        print(i)
                         if (i['duration_seconds'] == lengthseconds+1 or i['duration_seconds'] == lengthseconds) and artistname == i['artists'][0]['name'] and explicit == i['isExplicit']:
                             found = True
                             song = i
@@ -414,7 +413,9 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         search_results = ytmusic.search(artistzero + ' ' + albumtitle.split('(feat.')[0].rstrip(' '), filter='albums')
         album = None
         for i in search_results:
-            if artistzero.lower().rstrip() == i['artists'][0]['name'].lower().rstrip() and (i['title'].lower().rstrip(' ') in albumtitle.lower().rstrip(' ') or i['title'].lower().rstrip(' ') == albumtitle.lower().rstrip(' ')):
+            if albumtitle == 'good kid, m.A.A.d city':
+                albumtitle = 'good kid, m.A.A.d. city' # yt music at it again
+            if any(artistzero.lower().rstrip()  == artist['name'].lower().rstrip() for artist in i['artists']) and (i['title'].lower().rstrip() in albumtitle.lower().rstrip() or i['title'].lower().rstrip() == albumtitle.lower().rstrip()):
                 album = i
                 break
         vids = {}
