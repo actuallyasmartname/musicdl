@@ -55,7 +55,9 @@ def tagAudio(**kwargs):
         elif codec == 'opus':
             audio : OggOpus = kwargs['audio']
             audio.update(kwargs['tags'])
-            pic = Picture(data=kwargs['picture'], mime='image/jpeg')
+            pic = Picture()
+            pic.data = kwargs['picture']
+            pic.mime = 'image/jpeg'
             pic.type = 3
             audio["metadata_block_picture"] = [base64.b64encode(pic.write()).decode('ascii')]
             audio.save()
@@ -76,6 +78,7 @@ def querySearch(query, artistname='', albumname='', songname='', lengthseconds='
             for i in search_results:
                 for x in i['artists']:
                     if x['name'].lower() == artistname.lower():
+                        print(i)
                         if (i['duration_seconds'] == lengthseconds+1 or i['duration_seconds'] == lengthseconds) and artistname == i['artists'][0]['name'] and explicit == i['isExplicit']:
                             found = True
                             song = i
@@ -257,7 +260,6 @@ def downloadFromQuery(query, location='', bitrate=320, codec='mp3'):
         audio = OggOpus(f"{location}{winSongTitle} - {artist}.{codec}") 
         tagAudio(audio=audio, tags={'title': title, 'artist': artist.replace("'", ""), 'album': album}, picture=img)
 
-
 def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
     """Downloads an album based off of a search query (only for YT Music), YouTube Music link, Spotify link, Deezer link, or Soundcloud link (only do this if it's a Soundcloud exclusive, the quality sucks)"""
     isThirdParty = False
@@ -412,7 +414,7 @@ def downloadAlbum(query, bitrate=320, codec='mp3', forceytcoverart=False):
         search_results = ytmusic.search(artistzero + ' ' + albumtitle.split('(feat.')[0].rstrip(' '), filter='albums')
         album = None
         for i in search_results:
-            if artistzero.lower().rstrip() == i['artists'][0]['name'].lower().rstrip() and (albumtitle.split('(feat.')[0].lower().rstrip(' ') in i['title'].split('(feat.')[0].lower().rstrip(' ')):
+            if artistzero.lower().rstrip() == i['artists'][0]['name'].lower().rstrip() and (i['title'].lower().rstrip(' ') in albumtitle.lower().rstrip(' ') or i['title'].lower().rstrip(' ') == albumtitle.lower().rstrip(' ')):
                 album = i
                 break
         vids = {}
