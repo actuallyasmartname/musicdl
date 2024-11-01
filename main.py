@@ -35,8 +35,8 @@ from mutagen.id3 import ID3, APIC, TPE2, TPOS, COMM, TCOM
 from ytmusicapi import YTMusic
 from pytube import Playlist
 from urllib.parse import urlparse
-from musicdl.SpotifyAPI import SpotifyAPIAuthless
-from musicdl.DeezerAPI import DeezerAPIAuthless
+from SpotifyAPI import SpotifyAPIAuthless
+from DeezerAPI import DeezerAPIAuthless
 
 def tagAudio(**kwargs):
     if 'tags' and 'codec' and 'audio' not in kwargs:
